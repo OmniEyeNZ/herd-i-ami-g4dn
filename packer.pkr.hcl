@@ -97,7 +97,19 @@ build {
       "echo 'Updating system packages...'",
       "sudo apt-get update",
       "sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y",
-      "sudo apt-get install -y wget curl unzip jq awscli"
+      "sudo apt-get install -y wget curl unzip jq"
+    ]
+  }
+
+  # Install AWS CLI v2
+  provisioner "shell" {
+    inline = [
+      "echo 'Installing AWS CLI v2...'",
+      "curl -fsSL 'https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip' -o 'awscliv2.zip'",
+      "unzip -q awscliv2.zip",
+      "sudo ./aws/install --update",
+      "rm -rf aws awscliv2.zip",
+      "aws --version"
     ]
   }
 

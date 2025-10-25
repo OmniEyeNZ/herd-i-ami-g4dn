@@ -153,7 +153,7 @@ jobs:
           version: ${{ env.PACKER_VERSION }}
 
       - name: Initialize Packer
-        run: packer init packer.pkr.hcl
+        run: packer init .
 
       - name: Validate Packer Template
         env:
@@ -163,7 +163,7 @@ jobs:
           packer validate \
             -var "aws_region=${{ env.AWS_REGION_CODE }}" \
             -var "docker_image=${{ env.DOCKER_IMAGE }}" \
-            packer.pkr.hcl
+            .
 
       - name: Build AMI with Packer
         if: ${{ github.event.inputs.packer_action == 'build' }}
@@ -183,7 +183,7 @@ jobs:
             -var "aws_region=${{ env.AWS_REGION_CODE }}" \
             -var "docker_image=${{ env.DOCKER_IMAGE }}" \
             -var "ami_name_prefix=g4dn-gpu-monitored-${{ env.ENVIRONMENT }}-v${{ env.VERSION }}" \
-            packer.pkr.hcl
+            .
 
       - name: Upload Packer Manifest
         if: ${{ github.event.inputs.packer_action == 'build' }}
