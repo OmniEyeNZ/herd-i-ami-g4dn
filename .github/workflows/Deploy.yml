@@ -1,0 +1,204 @@
+name: Build GPU AMI with Packer
+
+run-name: ${{ github.event.inputs.packer_action == 'validate' && '✅' || '🔨' }} ${{ github.event.inputs.packer_action }} AMI for ${{ github.event.inputs.environment }} in ${{ github.event.inputs.aws_region }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      packer_action:
+        description: 'Packer Action'
+        type: choice
+        required: true
+        default: 'validate'
+        options:
+          - validate
+          - build
+      aws_region:
+        description: 'AWS Region'
+        type: choice
+        required: true
+        default: 'Sydney'
+        options:
+          - Sydney
+          - Oregon
+      environment:
+        description: 'Environment to deploy to'
+        type: environment
+        required: true
+        default: 'development'
+      ecr_repository:
+        description: 'ECR repository name (optional, e.g., task-lameness)'
+        type: string
+        required: false
+        default: ''
+      docker_image_tag:
+        description: 'Docker image tag to pre-load from ECR (optional, e.g., latest or v1.2.3)'
+        type: string
+        required: false
+        default: 'latest'
+      docker_image_public:
+        description: 'Public Docker image to pre-load (optional, e.g., nvidia/cuda:12.4.0-base-ubuntu24.04)'
+        type: string
+        required: false
+        default: ''
+
+env:
+  PACKER_VERSION: '1.10.0'
+
+jobs:
+  build-ami:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'development' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set Environment Name
+        run: |
+          if [ -z "${{ github.event.inputs.environment }}" ]; then
+            echo "ENVIRONMENT=development" >> $GITHUB_ENV
+          else
+            echo "ENVIRONMENT=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+          fi
+          echo "Environment: ${ENVIRONMENT}"
+
+      - name: Set AWS Region Code
+        run: |
+          case "${{ github.event.inputs.aws_region }}" in
+            "Sydney")
+              echo "AWS_REGION_CODE=ap-southeast-2" >> $GITHUB_ENV
+              ;;
+            "Oregon")
+              echo "AWS_REGION_CODE=us-west-2" >> $GITHUB_ENV
+              ;;
+            *)
+              echo "ERROR: Unknown region: ${{ github.event.inputs.aws_region }}"
+              exit 1
+              ;;
+          esac
+          echo "Mapped ${{ github.event.inputs.aws_region }} to ${AWS_REGION_CODE}"
+
+      - name: Get Version Tag
+        id: version
+        run: |
+          # Get the latest tag that matches semantic versioning pattern (v1.2.3)
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            # If triggered by a tag push, use that tag
+            TAG="${{ github.ref_name }}"
+          else
+            # Otherwise, get the latest tag or default
+            TAG=$(git describe --tags --match "v[0-9]*.[0-9]*.[0-9]*" --abbrev=0 2>/dev/null || echo "v1.0.0")
+          fi
+
+          # Remove 'v' prefix
+          VERSION=${TAG#v}
+
+          # Add commit SHA for non-tag builds
+          if [[ "${{ github.ref_type }}" != "tag" ]]; then
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            VERSION="${VERSION}-${SHORT_SHA}"
+          fi
+
+          echo "TAG=${TAG}" >> $GITHUB_ENV
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building version: ${VERSION}"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION_CODE }}
+
+      - name: Get AWS Account ID and ECR Image URL
+        if: ${{ github.event.inputs.ecr_repository != '' }}
+        run: |
+          # Get AWS Account ID
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" >> $GITHUB_ENV
+
+          # Build ECR image URL
+          ECR_IMAGE_URL="${AWS_ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION_CODE }}.amazonaws.com/${{ github.event.inputs.ecr_repository }}:${{ github.event.inputs.docker_image_tag }}"
+          echo "ECR_IMAGE_URL=${ECR_IMAGE_URL}" >> $GITHUB_ENV
+          echo "ECR Image URL: ${ECR_IMAGE_URL}"
+
+      - name: Set Docker Image for Packer
+        run: |
+          # Determine which Docker image to use
+          if [ -n "${{ github.event.inputs.ecr_repository }}" ]; then
+            DOCKER_IMAGE="${{ env.ECR_IMAGE_URL }}"
+            echo "Using ECR image: ${DOCKER_IMAGE}"
+          elif [ -n "${{ github.event.inputs.docker_image_public }}" ]; then
+            DOCKER_IMAGE="${{ github.event.inputs.docker_image_public }}"
+            echo "Using public image: ${DOCKER_IMAGE}"
+          else
+            DOCKER_IMAGE=""
+            echo "No Docker image specified - skipping pre-load"
+          fi
+          echo "DOCKER_IMAGE=${DOCKER_IMAGE}" >> $GITHUB_ENV
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Initialize Packer
+        run: packer init packer.pkr.hcl
+
+      - name: Validate Packer Template
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          packer validate \
+            -var "aws_region=${{ env.AWS_REGION_CODE }}" \
+            -var "docker_image=${{ env.DOCKER_IMAGE }}" \
+            packer.pkr.hcl
+
+      - name: Build AMI with Packer
+        if: ${{ github.event.inputs.packer_action == 'build' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          echo "=========================================="
+          echo "Building AMI"
+          echo "Environment: ${{ env.ENVIRONMENT }}"
+          echo "Region: ${{ env.AWS_REGION_CODE }}"
+          echo "Docker image to pre-load: ${{ env.DOCKER_IMAGE || 'None' }}"
+          echo "Version: ${{ env.VERSION }}"
+          echo "=========================================="
+
+          packer build \
+            -var "aws_region=${{ env.AWS_REGION_CODE }}" \
+            -var "docker_image=${{ env.DOCKER_IMAGE }}" \
+            -var "ami_name_prefix=g4dn-gpu-monitored-${{ env.ENVIRONMENT }}-v${{ env.VERSION }}" \
+            packer.pkr.hcl
+
+      - name: Upload Packer Manifest
+        if: ${{ github.event.inputs.packer_action == 'build' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: packer-manifest
+          path: manifest.json
+
+      - name: Display AMI Information
+        if: ${{ github.event.inputs.packer_action == 'build' }}
+        run: |
+          if [ -f manifest.json ]; then
+            echo "=========================================="
+            echo "AMI Build Complete!"
+            echo "=========================================="
+            AMI_ID=$(jq -r '.builds[0].artifact_id' manifest.json | cut -d':' -f2)
+            AMI_REGION=$(jq -r '.builds[0].artifact_id' manifest.json | cut -d':' -f1)
+            AMI_NAME=$(jq -r '.builds[0].custom_data.ami_name // .builds[0].name' manifest.json)
+
+            echo "AMI ID: ${AMI_ID}"
+            echo "Region: ${AMI_REGION}"
+            echo "AMI Name: ${AMI_NAME}"
+            echo ""
+            echo "To use this AMI, specify AMI ID: ${AMI_ID}"
+            echo "=========================================="
+          fi

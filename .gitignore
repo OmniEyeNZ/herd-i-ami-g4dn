@@ -1,0 +1,37 @@
+# Packer
+.packer.d/
+packer_cache/
+crash.log
+manifest.json
+*.box
+
+# Local secrets and environment files
+local-deployment/.secrets
+.env.local
+*.pem
+*.key
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Terraform (if used)
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tfvars
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
