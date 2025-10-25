@@ -1,4 +1,4 @@
-# Herd-i AMI Base - G4dn GPU Monitoring AMI
+# Herd-i AMI G4dn - GPU Monitoring AMI
 
 ## Project Overview
 
@@ -6,8 +6,8 @@ Automated AMI build pipeline using Packer to create GPU-optimized Amazon Machine
 
 ## Deployment Summary
 
-**Deploy:** Herd-i AMI Base - G4dn GPU Monitoring
-**Repo:** https://github.com/OmniEyeNZ/herd-i-ami-base
+**Deploy:** Herd-i AMI G4dn - GPU Monitoring
+**Repo:** https://github.com/OmniEyeNZ/herd-i-ami-g4dn
 **GitHub Action:** Build GPU AMI with Packer
 **Description:** Packer configuration to build optimized AWS AMIs for G4dn GPU instances with automated CloudWatch monitoring for CPU, RAM, disk, and GPU metrics. Pre-installs Docker with NVIDIA Container Toolkit, CloudWatch agent, and optional Docker image pre-loading to reduce instance startup time. Built on AWS Deep Learning Base GPU AMI (Ubuntu 24.04) with NVIDIA drivers.
 **Destination:** AWS AMI (EC2 Image)
