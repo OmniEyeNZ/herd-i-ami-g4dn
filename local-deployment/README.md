@@ -123,8 +123,7 @@ The Packer AMI build workflow creates GPU-optimized AMIs for G4dn instances with
 - Packer template validation
 - AWS Deep Learning Base GPU AMI selection (Ubuntu 24.04)
 - Docker and NVIDIA Container Toolkit installation
-- CloudWatch agent installation and configuration
-- GPU metrics collection script setup
+- CloudWatch agent installation and configuration with nvidia_gpu support
 - ECR authentication and Docker image pre-loading
 - Public Docker image pre-loading
 - Multi-environment support (development, test, production)
@@ -184,14 +183,19 @@ This pulls a public image from Docker Hub or other public registries.
 Simply omit both `ecr_repository` and `docker_image_public` inputs to skip Docker image pre-loading.
 
 ### GPU Metrics Collected
-The built AMI automatically collects and publishes these metrics to CloudWatch (namespace: `GPU/Metrics`):
-- **GPU Utilization** (Percent)
-- **GPU Memory Utilization** (Percent)
-- **GPU Memory Used** (Megabytes)
-- **GPU Temperature** (Celsius)
-- **GPU Power Draw** (Watts)
+The built AMI automatically collects **18 GPU metrics** using CloudWatch agent's built-in `nvidia_gpu` support:
 
-Metrics are collected every 60 seconds via a systemd timer that starts automatically on boot.
+**Core Performance:** GPU utilization, memory utilization, temperature, power draw, fan speed
+**Memory:** Total, used, and free memory (MB)
+**Hardware:** PCIe link generation/width
+**Clock Frequencies:** Graphics, SM, memory, video clocks
+**Encoder:** Session count, average FPS, latency
+
+**Metric Details:**
+- Collection Interval: 60 seconds
+- Namespace: `CWAgent` (not GPU/Metrics)
+- Dimensions: Index (GPU ID), Name (GPU type), Architecture
+- Reference: [AWS CloudWatch GPU Monitoring](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-Agent-NVIDIA-GPU.html)
 
 ## Configuration
 
@@ -454,7 +458,7 @@ sudo usermod -aG docker $USER
 - AMI builds will use real AWS resources and incur costs
 - Each environment should use separate AWS accounts for proper isolation
 - AMIs include environment name in the AMI name for easy identification
-- GPU metrics collection starts automatically when instances launch from the AMI
+- GPU metrics are collected by CloudWatch agent's built-in nvidia_gpu support (18 metrics)
 - CloudWatch agent is pre-installed but needs to be started on instance launch
 - Docker images pre-loaded in the AMI save 2-5 minutes on instance startup time
 
@@ -483,15 +487,19 @@ nvidia-smi
 # Verify Docker with GPU
 docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu24.04 nvidia-smi
 
-# Start CloudWatch agent
+# Start CloudWatch agent (includes GPU monitoring)
 sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
   -a fetch-config \
   -m ec2 \
   -s \
   -c file:/opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-config.json
 
-# Check GPU metrics timer (starts automatically)
-sudo systemctl status gpu-cloudwatch-metrics.timer
+# Check CloudWatch agent status
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a query -m ec2
+
+# View GPU metrics in CloudWatch (CWAgent namespace)
+# Dimensions: Index (GPU ID), Name (GPU type), Architecture
 ```
 
 ## Required IAM Permissions

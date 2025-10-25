@@ -85,6 +85,48 @@
           }
         ],
         "metrics_collection_interval": 60
+      },
+      "nvidia_gpu": {
+        "measurement": [
+          {
+            "name": "utilization_gpu",
+            "rename": "GPU_UTILIZATION",
+            "unit": "Percent"
+          },
+          {
+            "name": "utilization_memory",
+            "rename": "GPU_MEMORY_UTILIZATION",
+            "unit": "Percent"
+          },
+          {
+            "name": "temperature_gpu",
+            "rename": "GPU_TEMPERATURE",
+            "unit": "None"
+          },
+          {
+            "name": "power_draw",
+            "rename": "GPU_POWER_DRAW",
+            "unit": "None"
+          },
+          {
+            "name": "fan_speed",
+            "rename": "GPU_FAN_SPEED",
+            "unit": "Percent"
+          },
+          "memory_total",
+          "memory_used",
+          "memory_free",
+          "pcie_link_gen_current",
+          "pcie_link_width_current",
+          "clocks_current_graphics",
+          "clocks_current_sm",
+          "clocks_current_memory",
+          "clocks_current_video",
+          "encoder_stats_session_count",
+          "encoder_stats_average_fps",
+          "encoder_stats_average_latency"
+        ],
+        "metrics_collection_interval": 60
       }
     }
   }

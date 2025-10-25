@@ -49,15 +49,41 @@ This allows each environment to pre-load images from its own ECR repositories.
 
 ## GPU Metrics Collected
 
-The AMI includes automated GPU metrics collection to CloudWatch:
+The AMI uses CloudWatch agent's built-in **nvidia_gpu** support to automatically collect **18 GPU metrics**:
 
-- **GPU Utilization** (Percent)
-- **GPU Memory Utilization** (Percent)
-- **GPU Memory Used** (Megabytes)
-- **GPU Temperature** (Celsius)
-- **GPU Power Draw** (Watts)
+**Core Performance Metrics:**
+- GPU Utilization (Percent)
+- GPU Memory Utilization (Percent)
+- GPU Temperature (Celsius)
+- GPU Power Draw (Watts)
+- GPU Fan Speed (Percent)
 
-Metrics are collected every 60 seconds and published to the `GPU/Metrics` namespace in CloudWatch.
+**Memory Metrics:**
+- Total Memory (MB)
+- Used Memory (MB)
+- Free Memory (MB)
+
+**Hardware Metrics:**
+- PCIe Link Generation (Current)
+- PCIe Link Width (Current)
+
+**Clock Frequencies:**
+- Graphics Clock (MHz)
+- SM (Streaming Multiprocessor) Clock (MHz)
+- Memory Clock (MHz)
+- Video Clock (MHz)
+
+**Encoder Metrics:**
+- Encoder Session Count
+- Average FPS
+- Average Latency
+
+**Metric Details:**
+- Collection Interval: 60 seconds
+- Namespace: `CWAgent`
+- Dimensions: `Index` (GPU ID), `Name` (GPU type), `Architecture` (server architecture)
+
+This follows the [official AWS CloudWatch GPU monitoring documentation](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-Agent-NVIDIA-GPU.html).
 
 ## Project Structure
 
@@ -306,32 +332,46 @@ Modify `configs/cloudwatch-config.json` to adjust:
 - Additional metrics to collect
 - Namespace for metrics
 
-### GPU Monitoring Script
+### GPU Monitoring Configuration
 
-The GPU monitoring script is located at `/opt/aws/amazon-cloudwatch-agent/bin/scripts/gpu-metrics.sh` in the built AMI. You can customize the metrics collected by modifying `scripts/configure-gpu-monitoring.sh` before building.
+GPU metrics are collected automatically by the CloudWatch agent using its built-in `nvidia_gpu` support. The configuration is located in `configs/cloudwatch-config.json`. You can customize which GPU metrics are collected by modifying the `nvidia_gpu` section before building the AMI.
 
 ## Viewing GPU Metrics in CloudWatch
 
 1. Open the CloudWatch console
 2. Navigate to **Metrics** → **All metrics**
-3. Select the **GPU/Metrics** namespace
-4. Choose metrics by **InstanceId** and **GPUIndex**
-5. Create dashboards and alarms as needed
+3. Select the **CWAgent** namespace
+4. Choose metrics by dimensions:
+   - **Index**: GPU identifier (0, 1, 2, etc.)
+   - **Name**: GPU type (e.g., "NVIDIA Tesla T4")
+   - **Architecture**: Server architecture (e.g., "x86_64")
+5. Look for metrics starting with `GPU_` prefix (e.g., `GPU_UTILIZATION`, `GPU_TEMPERATURE`)
+6. Create dashboards and alarms as needed
 
 ## Troubleshooting
 
 ### GPU Metrics Not Appearing in CloudWatch
 
 1. Verify the instance has an IAM role with CloudWatch permissions
-2. Check the GPU metrics timer is running:
+2. Check the CloudWatch agent is running:
    ```bash
-   sudo systemctl status gpu-cloudwatch-metrics.timer
-   sudo systemctl status gpu-cloudwatch-metrics.service
+   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+     -a query -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-config.json
    ```
 
-3. Check the script manually:
+3. Verify NVIDIA drivers are working:
    ```bash
-   sudo /opt/aws/amazon-cloudwatch-agent/bin/scripts/gpu-metrics.sh
+   nvidia-smi
+   ```
+
+4. Check CloudWatch agent logs:
+   ```bash
+   sudo tail -f /opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log
+   ```
+
+5. Ensure the configuration includes the `nvidia_gpu` section:
+   ```bash
+   sudo cat /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-config.json | grep -A 5 nvidia_gpu
    ```
 
 ### Docker Not Working with GPU
